@@ -8,9 +8,22 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 
+/* marcos for fast reading GPIO value */
+#define BCM2708_PERI_BASE   0x20000000
+#define GPIO_BASE           (BCM2708_PERI_BASE + 0x200000)
+#define GPLEV0				(gpio_reg + 0x34)
+#define GPLEV1				(gpio_reg + 0x38)
+
+#define GET_GPIO(g) \
+		((__raw_readl(GPLEV0 + (g / 32) * 4) >> (g % 32)) & 1)
+
+/* define the pins used to receive signal */
 #define PIN1 17
 #define PIN2 27
 #define PIN3 22
+
+/* variable that points to the mapped mem address*/
+static void __iomem *gpio_reg;
 
 struct gpio txinfo_gpios[] = {
   {PIN1, GPIOF_IN, "TX INFO 1"},
@@ -41,14 +54,15 @@ static irqreturn_t txinfo_r_irq_handler(int irq, void *dev_id) {
   spin_lock_irqsave(&driver_lock, flags);
 
   dev = (struct gpio *) dev_id;
-  rising = gpio_get_value(dev->gpio);
+  /* rising = gpio_get_value(dev->gpio); */
+  rising = GET_GPIO(dev->gpio);
 
   if (rising) {
-    //rising edge
+    /* rising edge */
     printk(KERN_INFO "[TX]rising edge from %d\n", dev->gpio);
   }
   else {
-    //falling edge
+    /* falling edge */
     printk(KERN_INFO "[TX]falling edge from %d\n", dev->gpio);
   }
 
@@ -61,6 +75,9 @@ static irqreturn_t txinfo_r_irq_handler(int irq, void *dev_id) {
 static int __init txinfo_init(void)
 {
   int ret;
+
+  /* map mem address of GPIO registers */
+  gpio_reg = ioremap(GPIO_BASE, 1024);
 
   printk(KERN_INFO "[TX timeline] Init\n");
 
@@ -117,6 +134,7 @@ fail_req_irq2:
 fail_req_irq1:
   gpio_free_array(txinfo_gpios, ARRAY_SIZE(txinfo_gpios));
 fail_request_gpio:
+  iounmap(gpio_reg);
   return ret;
 }
 
@@ -128,6 +146,7 @@ static void __exit txinfo_exit(void)
   free_irq(txinfo_irqs[2], (void *) &(txinfo_gpios[2]));
 
   gpio_free_array(txinfo_gpios, ARRAY_SIZE(txinfo_gpios));
+  iounmap(gpio_reg);
 
   printk(KERN_INFO "[TX timeline] Uninit\n");
   return;
