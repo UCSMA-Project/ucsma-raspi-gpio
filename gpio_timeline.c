@@ -22,6 +22,21 @@
 #define PIN2 27
 #define PIN3 22
 
+#define MAX_LOG_COUNT 10000
+
+
+/* struct and variable for logging */
+struct log {
+  struct timespec time;
+  unsigned int gpio;
+  bool rising;
+};
+struct log logs[MAX_LOG_COUNT];
+
+u32 cur_log_idx = 0;
+u32 max_log_count = 0;
+module_param(max_log_count, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+
 /* variable that points to the mapped mem address*/
 static void __iomem *gpio_reg;
 
@@ -49,21 +64,31 @@ DEFINE_SPINLOCK(driver_lock);
 /* Interrupt handler called on falling edfe of UNLOCK_IN GPIO */
 static irqreturn_t txinfo_r_irq_handler(int irq, void *dev_id) {
   struct gpio *dev;
-  unsigned char rising;
+
+  dev = (struct gpio *) dev_id;
 
   spin_lock_irqsave(&driver_lock, flags);
 
-  dev = (struct gpio *) dev_id;
-  /* rising = gpio_get_value(dev->gpio); */
-  rising = GET_GPIO(dev->gpio);
-
-  if (rising) {
-    /* rising edge */
-    printk(KERN_INFO "[TX]rising edge from %d\n", dev->gpio);
+  if (cur_log_idx < max_log_count) {
+    logs[cur_log_idx].gpio = dev->gpio;
+    logs[cur_log_idx].rising = GET_GPIO(dev->gpio);
+    getnstimeofday(&(logs[cur_log_idx].time));
+    cur_log_idx++;
   }
-  else {
-    /* falling edge */
-    printk(KERN_INFO "[TX]falling edge from %d\n", dev->gpio);
+
+  if (cur_log_idx && cur_log_idx == max_log_count) {
+    printk(KERN_INFO "\n");
+    for (cur_log_idx = 0; cur_log_idx < max_log_count; cur_log_idx++) {
+      if (logs[cur_log_idx].rising)
+        printk("[%lu.%09lu] GPIO: %2d rising\n", logs[cur_log_idx].time.tv_sec,
+                 logs[cur_log_idx].time.tv_nsec, logs[cur_log_idx].gpio);
+      else
+        printk("[%lu.%09lu] GPIO: %2d falling\n", logs[cur_log_idx].time.tv_sec,
+                 logs[cur_log_idx].time.tv_nsec, logs[cur_log_idx].gpio);
+    }
+    printk(KERN_INFO "clearing max_log_count %d -> 0\n", max_log_count);
+    max_log_count = 0;
+    cur_log_idx = 0;
   }
 
   spin_unlock_irqrestore(&driver_lock, flags);
