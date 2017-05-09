@@ -29,7 +29,6 @@
 struct log {
   struct timespec time;
   unsigned int gpio;
-  bool rising;
 };
 struct log logs[MAX_LOG_COUNT];
 
@@ -71,7 +70,6 @@ static irqreturn_t txinfo_r_irq_handler(int irq, void *dev_id) {
 
   if (cur_log_idx < max_log_count) {
     logs[cur_log_idx].gpio = dev->gpio;
-    logs[cur_log_idx].rising = GET_GPIO(dev->gpio);
     getnstimeofday(&(logs[cur_log_idx].time));
     cur_log_idx++;
   }
@@ -79,12 +77,8 @@ static irqreturn_t txinfo_r_irq_handler(int irq, void *dev_id) {
   if (cur_log_idx && cur_log_idx == max_log_count) {
     printk(KERN_INFO "\n");
     for (cur_log_idx = 0; cur_log_idx < max_log_count; cur_log_idx++) {
-      if (logs[cur_log_idx].rising)
-        printk("[%lu.%09lu] GPIO: %2d rising\n", logs[cur_log_idx].time.tv_sec,
-                 logs[cur_log_idx].time.tv_nsec, logs[cur_log_idx].gpio);
-      else
-        printk("[%lu.%09lu] GPIO: %2d falling\n", logs[cur_log_idx].time.tv_sec,
-                 logs[cur_log_idx].time.tv_nsec, logs[cur_log_idx].gpio);
+      printk("[%lu.%09lu] GPIO: %2d falling\n", logs[cur_log_idx].time.tv_sec,
+               logs[cur_log_idx].time.tv_nsec, logs[cur_log_idx].gpio);
     }
     printk(KERN_INFO "clearing max_log_count %d -> 0\n", max_log_count);
     max_log_count = 0;
@@ -127,7 +121,7 @@ static int __init txinfo_init(void)
   /* Initialize interrupt on UNLOCK_IN GPIO to call txinfo_r_irq_handler */
   else if ((ret = request_any_context_irq(txinfo_irqs[0],
                 (irq_handler_t) txinfo_r_irq_handler,
-                IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+                IRQF_TRIGGER_FALLING,
                 "GPIO IRQ 1",
                 (void *) &(txinfo_gpios[0])))) {
     printk(KERN_ERR "[TX timeline] unable to get GPIO IRQ 1\n");
@@ -135,7 +129,7 @@ static int __init txinfo_init(void)
   }
   else if ((ret = request_any_context_irq(txinfo_irqs[1],
                 (irq_handler_t) txinfo_r_irq_handler,
-                IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+                IRQF_TRIGGER_FALLING,
                 "GPIO IRQ 2",
                 (void *) &(txinfo_gpios[1])))) {
     printk(KERN_ERR "[TX timeline] unable to get GPIO IRQ 2\n");
@@ -143,7 +137,7 @@ static int __init txinfo_init(void)
   }
   else if ((ret = request_any_context_irq(txinfo_irqs[2],
                 (irq_handler_t) txinfo_r_irq_handler,
-                IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+                IRQF_TRIGGER_FALLING,
                 "GPIO IRQ 3",
                 (void *) &(txinfo_gpios[2])))) {
     printk(KERN_ERR "[TX timeline] unable to get GPIO IRQ 3\n");
