@@ -4,3 +4,5 @@ obj-m := gpio_timeline.o
 
 all:
 	make -C $(KERNEL_DIR) M=$(PWD) modules
+clean:
+	rm *.o *.ko
