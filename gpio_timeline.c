@@ -36,6 +36,9 @@ u32 cur_log_idx = 0;
 u32 max_log_count = 0;
 module_param(max_log_count, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 
+u32 human_readable_output = 1;
+module_param(human_readable_output, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+
 /* variable that points to the mapped mem address*/
 static void __iomem *gpio_reg;
 
@@ -63,6 +66,7 @@ DEFINE_SPINLOCK(driver_lock);
 /* Interrupt handler called on falling edfe of UNLOCK_IN GPIO */
 static irqreturn_t txinfo_r_irq_handler(int irq, void *dev_id) {
   struct gpio *dev;
+  struct timespec diff;
 
   dev = (struct gpio *) dev_id;
 
@@ -76,10 +80,20 @@ static irqreturn_t txinfo_r_irq_handler(int irq, void *dev_id) {
 
   if (cur_log_idx && cur_log_idx == max_log_count) {
     printk(KERN_INFO "\n");
-    for (cur_log_idx = 0; cur_log_idx < max_log_count; cur_log_idx++) {
-      printk("[%lu.%09lu] GPIO: %2d falling\n", logs[cur_log_idx].time.tv_sec,
-               logs[cur_log_idx].time.tv_nsec, logs[cur_log_idx].gpio);
+    printk("[%lu.%09lu] GPIO: %2d falling\n", logs[0].time.tv_sec,
+             logs[0].time.tv_nsec, logs[0].gpio);
+    for (cur_log_idx = 1; cur_log_idx < max_log_count; cur_log_idx++) {
+      diff = timespec_sub(logs[cur_log_idx].time, logs[cur_log_idx - 1].time);
+      if (human_readable_output)
+        printk("[%4lu us] GPIO: %2d falling\n",
+                diff.tv_sec * 1000000 + diff.tv_nsec / 1000,
+                logs[cur_log_idx].gpio);
+      else
+        printk("%lu:%2df\n",
+                diff.tv_sec * 1000000 + diff.tv_nsec / 1000,
+                logs[cur_log_idx].gpio);
     }
+
     printk(KERN_INFO "clearing max_log_count %d -> 0\n", max_log_count);
     max_log_count = 0;
     cur_log_idx = 0;
