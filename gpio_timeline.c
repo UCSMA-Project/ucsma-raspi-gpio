@@ -21,8 +21,9 @@
 #define PIN1 17
 #define PIN2 27
 #define PIN3 22
+#define UNLOCKING_PIN 18
 
-#define MAX_LOG_COUNT 10000
+#define MAX_LOG_COUNT 50000
 
 
 /* struct and variable for logging */
@@ -46,10 +47,11 @@ struct gpio txinfo_gpios[] = {
   {PIN1, GPIOF_IN, "TX INFO 1"},
   {PIN2, GPIOF_IN, "TX INFO 2"},
   {PIN3, GPIOF_IN, "TX INFO 3"},
+  {UNLOCKING_PIN, GPIOF_IN, "UNLOCKING INFO"},
 };
 
 /* FD that we use to keep track of incoming TX info signals */
-short int txinfo_irqs[3] = {0, 0, 0};
+short int txinfo_irqs[4] = {0, 0, 0, 0};
 
 /*
  *  * Holds onto any pending interrupts while we handle the
@@ -132,6 +134,10 @@ static int __init txinfo_init(void)
     printk(KERN_ERR "[TX timeline] IRQ mapping failure 3\n");
     goto fail_req_irq1;
   }
+  else if ((ret = txinfo_irqs[3] = gpio_to_irq(txinfo_gpios[3].gpio)) < 0) {
+    printk(KERN_ERR "[TX timeline] IRQ mapping failure UNLOCKING PIN\n");
+    goto fail_req_irq1;
+  }
   /* Initialize interrupt on UNLOCK_IN GPIO to call txinfo_r_irq_handler */
   else if ((ret = request_any_context_irq(txinfo_irqs[0],
                 (irq_handler_t) txinfo_r_irq_handler,
@@ -157,9 +163,19 @@ static int __init txinfo_init(void)
     printk(KERN_ERR "[TX timeline] unable to get GPIO IRQ 3\n");
     goto fail_req_irq3;
   }
+  else if ((ret = request_any_context_irq(txinfo_irqs[3],
+                (irq_handler_t) txinfo_r_irq_handler,
+                IRQF_TRIGGER_FALLING,
+                "GPIO IRQ UNLOCKING",
+                (void *) &(txinfo_gpios[3])))) {
+    printk(KERN_ERR "[TX timeline] unable to get GPIO IRQ UNLOCKING\n");
+    goto fail_req_irq_unlocking;
+  }
 
   return 0;
 
+fail_req_irq_unlocking:
+  free_irq(txinfo_irqs[2], (void *) &(txinfo_gpios[2]));
 fail_req_irq3:
   free_irq(txinfo_irqs[1], (void *) &(txinfo_gpios[1]));
 fail_req_irq2:
@@ -177,6 +193,7 @@ static void __exit txinfo_exit(void)
   free_irq(txinfo_irqs[0], (void *) &(txinfo_gpios[0]));
   free_irq(txinfo_irqs[1], (void *) &(txinfo_gpios[1]));
   free_irq(txinfo_irqs[2], (void *) &(txinfo_gpios[2]));
+  free_irq(txinfo_irqs[3], (void *) &(txinfo_gpios[3]));
 
   gpio_free_array(txinfo_gpios, ARRAY_SIZE(txinfo_gpios));
   iounmap(gpio_reg);
